@@ -1,5 +1,4 @@
 from agno.agent import Agent
-from agno.models.groq import Groq
 import os
 from agno.db.sqlite import SqliteDb
 from dotenv import load_dotenv
@@ -7,8 +6,9 @@ from dotenv import load_dotenv
 from agno.knowledge.reader.pdf_reader import PDFReader
 from agno.knowledge.chunking.recursive import RecursiveChunking
 from agno.models.openai import OpenAIChat
-from agno.embedders.openai import OpenAIEmbedder
+from agno.knowledge.embedder.openai import OpenAIEmbedder
 from agno.vectordb.chroma import ChromaDb
+from agno.knowledge.knowledge import Knowledge
 
 
 load_dotenv()
@@ -16,7 +16,7 @@ load_dotenv()
 
 db = SqliteDb(db_file="agno.db")
 
-vector_db = ChromaDb(
+db_vetor = ChromaDb(
     collection="quadro_geral_dados_municipais",
     path="vector_db/Chromadb",
     embedder=OpenAIEmbedder(
@@ -25,24 +25,43 @@ vector_db = ChromaDb(
     ),
     persistent_client=True,
 )
+knowledge = Knowledge(vector_db=db_vetor) 
+#Leitor de PDFs
+
+pdf_reader = PDFReader(
+    chunking_strategy=RecursiveChunking(
+        chunk_size=2000,
+        overlap=200,
+    ),
+)
+knowledge.insert(path="docs/", reader=pdf_reader)
 
 agent = Agent(
-    name="comentarista_esportivo",
+    name="analista_legislativo",
     user_id="user1",
-    session_id="esportes",
-    model=Groq(id="openai/gpt-oss-120b"),
-    tools=[{"type": "browser_search"}],
+    session_id="politica_local",
+    model=OpenAIChat(
+        id="gpt-5-nano",
+        api_key=os.getenv("OPENAI_API_KEY")),
     db=db,
-    vector_db=vector_db,
-    update_memory_on_run=True,
+    instructions=[
+        "Voce é um analista legislativo especializado em  analisar atas de reunioes de camaras municipais. Seu objetivo é extrair informaçoes relevantes"
+        
+        "Utilize a base de conhecimento contruida a partir das atas para responder as perguntas de forma precisa e consisa"
+    ],
+    enable_agentic_memory=True,
     add_memories_to_context=True,
-    add_history_to_context=True,
-    num_history_runs=5
+    debug_mode=True,
+    
+    #RAG
+    knowledge=knowledge,
+    search_knowledge=True
+    
 )
 
 
 while True:
-    pergunta = input("Digite sua pergunta sobre futebol: ")
+    pergunta = input("Digite sua pergunta sobre o pdf : ")
     agent.print_response(pergunta)
     
     user_input = input("Digite 'sair' para encerrar ou pressione Enter para continuar: ")
